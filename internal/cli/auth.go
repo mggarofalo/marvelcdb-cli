@@ -68,10 +68,7 @@ resulting URL back into the terminal.`),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			creds, err := f.store.LoadClient()
 			if err != nil {
-				if errors.Is(err, auth.ErrNoCredentials) {
-					return errNotLoggedIn("no OAuth2 client is configured")
-				}
-				return err
+				return credentialError(err, "no OAuth2 client is configured")
 			}
 			if redirectURI != "" {
 				creds.RedirectURI = redirectURI
@@ -179,6 +176,7 @@ func authStatusTable(s auth.Status) *output.Table {
 		Headers: []string{"SETTING", "VALUE"},
 		Rows: [][]string{
 			{"keyring service", s.Service},
+			{"keyring problem", orDefault(s.Problem, "-")},
 			{"client configured", yesNo(s.HasClient)},
 			{"client id", orDefault(s.ClientID, "-")},
 			{"client source", orDefault(s.ClientSource, "-")},
@@ -307,10 +305,7 @@ as a secret — anything holding it can act as you on MarvelCDB.`),
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			src, err := f.TokenSource(cmd.Context())
 			if err != nil {
-				if errors.Is(err, auth.ErrNoCredentials) {
-					return errNotLoggedIn("you are not signed in")
-				}
-				return err
+				return credentialError(err, "you are not signed in")
 			}
 			tok, err := src.Token()
 			if err != nil {

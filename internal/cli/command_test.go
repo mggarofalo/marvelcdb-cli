@@ -235,7 +235,12 @@ func TestSignedOutDeckCommandsExplainThemselves(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error when signed out")
 	}
-	if !strings.Contains(err.Error(), "auth client set") {
+	// On a developer machine the keyring answers "nothing stored"; in CI there
+	// is no keyring at all. Both must produce advice the user can act on, and
+	// both must exit 3.
+	actionable := strings.Contains(err.Error(), "auth client set") ||
+		strings.Contains(err.Error(), "MARVELCDB_CLIENT_ID")
+	if !actionable {
 		t.Errorf("error should say how to fix it, got: %v", err)
 	}
 	if got := exitCode(err); got != 3 {

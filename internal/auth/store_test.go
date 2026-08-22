@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
 )
 
@@ -209,5 +210,52 @@ func TestMemoryBackendDelete(t *testing.T) {
 	}
 	if err := b.Delete("svc", "acct"); err != nil {
 		t.Errorf("Delete = %v", err)
+	}
+}
+
+// failingBackend stands in for a machine with no Secret Service running.
+type failingBackend struct{ err error }
+
+func (b failingBackend) Get(string, string) (string, error) { return "", b.err }
+func (b failingBackend) Set(string, string, string) error   { return b.err }
+func (b failingBackend) Delete(string, string) error        { return b.err }
+
+func TestKeyringUnavailableIsDistinctFromEmpty(t *testing.T) {
+	t.Parallel()
+
+	dbusErr := errors.New("The name org.freedesktop.secrets was not provided by any .service files")
+	s := NewStoreWithBackend("marvelcdb-cli-test", failingBackend{err: classify(dbusErr)})
+
+	if _, err := s.LoadClient(); !errors.Is(err, ErrKeyringUnavailable) {
+		t.Errorf("LoadClient = %v, want ErrKeyringUnavailable", err)
+	}
+	if _, err := s.LoadToken(); !errors.Is(err, ErrKeyringUnavailable) {
+		t.Errorf("LoadToken = %v, want ErrKeyringUnavailable", err)
+	}
+	// "no keyring" must not be mistaken for "nothing stored": the fixes differ.
+	if _, err := s.LoadClient(); errors.Is(err, ErrNoCredentials) {
+		t.Error("an unreachable keyring should not read as ErrNoCredentials")
+	}
+
+	status := s.Status()
+	if status.Problem == "" {
+		t.Error("status should explain why nothing could be read")
+	}
+	if !strings.Contains(status.Problem, EnvClientID) {
+		t.Errorf("status problem should name the environment fallback, got %q", status.Problem)
+	}
+}
+
+func TestClassify(t *testing.T) {
+	t.Parallel()
+
+	if err := classify(nil); err != nil {
+		t.Errorf("classify(nil) = %v", err)
+	}
+	if err := classify(keyring.ErrNotFound); !errors.Is(err, ErrNoCredentials) {
+		t.Errorf("classify(ErrNotFound) = %v, want ErrNoCredentials", err)
+	}
+	if err := classify(errors.New("dbus exploded")); !errors.Is(err, ErrKeyringUnavailable) {
+		t.Errorf("classify(other) = %v, want ErrKeyringUnavailable", err)
 	}
 }
