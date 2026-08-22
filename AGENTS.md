@@ -143,8 +143,19 @@ Examples:
 Feature branches off `main`, squash-merged through a PR. `main` is protected:
 PR required, CI must pass, no force-push.
 
-Releases are managed by [release-please](https://github.com/googleapis/release-please);
-publishing a release builds and attaches binaries for macOS, Linux and Windows.
+Releases are plain annotated git tags, `v0.1.0` onwards, following [semantic
+versioning](https://semver.org). There is no release automation: tag a commit on
+`main` and push the tag.
+
+```bash
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+```
+
+Users install by building from source, so a tag is all that is needed — `go
+install ...@v0.2.0` and `make install` both resolve it. `.github/workflows/release.yml`
+will additionally build and attach binaries for macOS, Linux and Windows *if*
+you publish a GitHub Release from a tag; it does nothing on a bare tag push.
 
 ## Agent Rules
 
