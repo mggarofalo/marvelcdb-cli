@@ -15,18 +15,51 @@ CODE   NAME                          TYPE  FACTION     COST  PACK
 
 ## Install
 
+Building from source is the supported install path. You need [Go 1.26 or newer](https://go.dev/dl/); nothing else.
+
+### With `go install`
+
 ```bash
 go install github.com/mggarofalo/marvelcdb-cli/cmd/marvelcdb@latest
 ```
 
-Or build from a clone:
+That drops `marvelcdb` in `$(go env GOPATH)/bin`. Add it to your `PATH` if it is not there already:
 
 ```bash
-make build      # produces ./marvelcdb
-make install    # installs into $GOPATH/bin
+export PATH="$PATH:$(go env GOPATH)/bin"
 ```
 
-Pre-built binaries for macOS, Linux and Windows are attached to each [release](https://github.com/mggarofalo/marvelcdb-cli/releases).
+Pin a version by replacing `@latest` with a tag, for example `@v0.1.0`.
+
+### From a clone
+
+```bash
+git clone https://github.com/mggarofalo/marvelcdb-cli.git
+cd marvelcdb-cli
+make build          # produces ./marvelcdb in the working directory
+./marvelcdb version
+```
+
+`make install` builds and installs into `$(go env GOPATH)/bin` instead.
+
+Both targets stamp the binary with the nearest git tag and the current commit, so `marvelcdb version` tells you exactly what you are running. To build a specific version:
+
+```bash
+git checkout v0.1.0
+make install
+```
+
+### Cross-compiling
+
+Go needs no C toolchain here, so any host can build for any target:
+
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 make build
+```
+
+### Versions
+
+Releases are plain git tags, `v0.1.0` onwards. `git tag --list` shows what exists; the [tags page](https://github.com/mggarofalo/marvelcdb-cli/tags) has the same list with source archives.
 
 ## Getting started
 
