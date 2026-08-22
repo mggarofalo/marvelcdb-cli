@@ -39,6 +39,11 @@ const (
 // is set.
 var ErrNoCredentials = errors.New("no credentials stored")
 
+// ErrKeyringUnavailable reports that the OS keyring could not be reached at
+// all. Containers and headless Linux boxes usually have no Secret Service
+// running, and the D-Bus error they produce says nothing a user can act on.
+var ErrKeyringUnavailable = errors.New("no OS keyring available")
+
 // Backend is the subset of the keyring the store needs. It exists so tests can
 // run without touching a real keyring.
 type Backend interface {
@@ -51,22 +56,29 @@ type systemKeyring struct{}
 
 func (systemKeyring) Get(service, account string) (string, error) {
 	v, err := keyring.Get(service, account)
-	if errors.Is(err, keyring.ErrNotFound) {
-		return "", ErrNoCredentials
-	}
-	return v, err
+	return v, classify(err)
 }
 
 func (systemKeyring) Set(service, account, secret string) error {
-	return keyring.Set(service, account, secret)
+	return classify(keyring.Set(service, account, secret))
 }
 
 func (systemKeyring) Delete(service, account string) error {
-	err := keyring.Delete(service, account)
-	if errors.Is(err, keyring.ErrNotFound) {
+	return classify(keyring.Delete(service, account))
+}
+
+// classify separates "the keyring says there is nothing here" from "there is no
+// keyring". Anything that is not a plain miss is treated as the latter: we
+// could not read the store, which is a different problem for the user to solve.
+func classify(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, keyring.ErrNotFound):
 		return ErrNoCredentials
+	default:
+		return fmt.Errorf("%w: %w", ErrKeyringUnavailable, err)
 	}
-	return err
 }
 
 // MemoryBackend is an in-process Backend for tests.
@@ -235,6 +247,10 @@ func (s *Store) DeleteToken() error {
 	return nil
 }
 
+// EnvFallbackHint tells a user on a keyring-less machine what to do instead.
+const EnvFallbackHint = "set " + EnvClientID + ", " + EnvClientSecret +
+	" and " + EnvAccessToken + " in the environment instead"
+
 // Status summarises what is stored, without revealing any secret.
 type Status struct {
 	HasClient    bool      `json:"has_client"`
@@ -246,12 +262,17 @@ type Status struct {
 	Expired      bool      `json:"expired"`
 	HasRefresh   bool      `json:"has_refresh_token"`
 	Service      string    `json:"keyring_service"`
+	// Problem explains why nothing could be read, when that is the reason the
+	// rest of this struct is empty.
+	Problem string `json:"problem,omitempty"`
 }
 
 // Status reports what credentials are available.
 func (s *Store) Status() Status {
 	st := Status{Service: s.service}
-	if c, err := s.LoadClient(); err == nil && c.ID != "" {
+	if c, err := s.LoadClient(); err != nil && errors.Is(err, ErrKeyringUnavailable) {
+		st.Problem = err.Error() + "; " + EnvFallbackHint
+	} else if err == nil && c.ID != "" {
 		st.HasClient = true
 		st.ClientID = c.ID
 		st.ClientSource = "keyring"

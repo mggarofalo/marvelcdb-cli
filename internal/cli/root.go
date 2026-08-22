@@ -207,17 +207,11 @@ func (f *Factory) AuthClient(ctx context.Context) (*api.Client, error) {
 	}
 	creds, err := f.store.LoadClient()
 	if err != nil {
-		if errors.Is(err, auth.ErrNoCredentials) {
-			return nil, errNotLoggedIn("no OAuth2 client is configured")
-		}
-		return nil, err
+		return nil, credentialError(err, "no OAuth2 client is configured")
 	}
 	tok, err := f.store.LoadToken()
 	if err != nil {
-		if errors.Is(err, auth.ErrNoCredentials) {
-			return nil, errNotLoggedIn("you are not signed in")
-		}
-		return nil, err
+		return nil, credentialError(err, "you are not signed in")
 	}
 
 	cfg, err := auth.Config(f.cfg.BaseURL, creds)
@@ -250,6 +244,23 @@ func (f *Factory) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 		return nil, err
 	}
 	return auth.PersistingTokenSource(f.store, cfg.TokenSource(ctx, tok), tok), nil
+}
+
+// credentialError turns a credential-store failure into advice. A missing
+// keyring is a different problem from a missing login, and saying so saves the
+// user from debugging a D-Bus message.
+func credentialError(err error, reason string) error {
+	switch {
+	case errors.Is(err, auth.ErrKeyringUnavailable):
+		return fmt.Errorf("%w: %v.\n\nThis machine has no usable credential store, so %s:\n"+
+			"  export %s=<id>\n  export %s=<secret>\n  export %s=<token>",
+			api.ErrUnauthorized, err, auth.EnvFallbackHint,
+			auth.EnvClientID, auth.EnvClientSecret, auth.EnvAccessToken)
+	case errors.Is(err, auth.ErrNoCredentials):
+		return errNotLoggedIn(reason)
+	default:
+		return err
+	}
 }
 
 func errNotLoggedIn(reason string) error {

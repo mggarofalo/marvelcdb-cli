@@ -117,7 +117,7 @@ On a machine with no keyring (CI, a container, a headless box), set these instea
 | `MARVELCDB_ACCESS_TOKEN` | Access token |
 | `MARVELCDB_REFRESH_TOKEN` | Refresh token |
 
-The environment takes precedence over the keyring.
+The environment takes precedence over the keyring. If no keyring is reachable — a container, a headless Linux box with no Secret Service — the CLI says so and points at these variables, rather than surfacing a D-Bus error.
 
 ### Editing a deck
 
